@@ -1,9 +1,339 @@
-Esta aplicación permite visualizar algunas variables de la base de datos de Maddison. 
-En esta nueva versión incorporó: 
-1) los niveles y tasas de crecimiento del GDP, Per Capita GDP y de la población; y
-2) un gráfico de dispersión que mapea las observaciones por país, por año y por región.
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
 
-Puede consultar la app en la siguiente dirección:
+library(shiny)
+library(dygraphs)
+library(xts)
+library(zoo)
+library(base)
+library(scatterD3)
+library(dplyr)
 
-https://hermilocg.shinyapps.io/AppHockeyStick_Ver_2/
+source("Listas.R")
+
+load("POPTS.RData")
+load("GDPDBTS.RData")
+load("PPGDPDBTS.RData")
+load("Data_Scatter.RData")
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+  titlePanel("Historical Statistics of the World Economy: 1820-2008 (Copyright Angus Maddison)"), 
+  div(class="row", 
+      div(class="col-md-12", 
+          div(class="alert alert-warning alert-dismissible", 
+              HTML('<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>'), 
+              HTML("<strong>Universidad Nacional Autonoma de Mexico :</strong> 
+                   <ul> 
+                   <li>Posgrado de Economia</li> 
+                   </ul>")))),   
+  navbarPage("Menu",
+             navbarMenu("Contents",
+                        tabPanel("Population Levels",sidebarLayout(
+                          
+                          sidebarPanel(
+                            selectizeInput(
+                              'epopulation', 'Select Countries', choices = ListPop, multiple = TRUE
+                            )
+                          ),
+                          mainPanel(
+                            
+                            dygraphOutput("dyPlotPopulation")
+                          )
+                        )
+                        ),
+                        tabPanel("GDP Levels",sidebarLayout(
+                          
+                          sidebarPanel(
+                            selectizeInput(
+                              'egdp', 'Select Countries', choices = listGDP, multiple = TRUE
+                            )
+                          ),
+                          mainPanel(
+                            
+                            dygraphOutput("dyPlotGDP")
+                          )
+                        )
+                        ),
+                        tabPanel("Per Capita GDP Levels",sidebarLayout(
+                          
+                          sidebarPanel(
+                            selectizeInput(
+                              'eppgdp', 'Select Countries', choices = ListPPGDP, multiple = TRUE
+                            )
+                          ),
+                          mainPanel(
+                            
+                            dygraphOutput("dyPlotPPGDP")
+                          )
+                        )
+                        ),
+                        tabPanel("Population-Growth",sidebarLayout(
+                          
+                          sidebarPanel(
+                            selectizeInput(
+                              'epopulation_growth', 'Select Countries', choices = ListPop, multiple = TRUE
+                            )
+                          ),
+                          mainPanel(
+                            
+                            dygraphOutput("dyPlotPopulation_growth")
+                          )
+                        )
+                        ),
+                        tabPanel("GDP-Growth",sidebarLayout(
+                          
+                          sidebarPanel(
+                            selectizeInput(
+                              'egdp_growth', 'Select Countries', choices = listGDP, multiple = TRUE
+                            )
+                          ),
+                          mainPanel(
+                            
+                            dygraphOutput("dyPlotGDP_growth")
+                          )
+                        )
+                        ),
+                        tabPanel("Per Capita GDP-Growth",sidebarLayout(
+                          
+                          sidebarPanel(
+                            selectizeInput(
+                              'eppgdp_growth', 'Select Countries', choices = ListPPGDP, multiple = TRUE
+                            )
+                          ),
+                          mainPanel(
+                            
+                            dygraphOutput("dyPlotPPGDP_growth")
+                          )
+                        )
+                        )
+             ),
+             tabPanel("Scatter Plot",
+                      
+                      sidebarLayout(
+                        sidebarPanel(
+                          sliderInput("scatterD3_ano", "Year of study",
+                                      min = 1828, max = 2008, step = 10, value = 1958),
+                          selectizeInput(
+                          'Region', 'Add a Region of the World', choices = ListRegion, multiple = TRUE,selected = "8 Latin American countries"
+                          ),
+                          selectInput("scatterD3_x", "x variable :",
+                                      choices = c("GDP Levels"="GDPDBTS",
+                                                  "Per Capita GDP"="PPGDPDBTS",
+                                                  "Per Capita GDP-Growth"="DIF_PPGDPDBTS_ln", 
+                                                  "GDP-Growth"="DIF_GDPDBTS_ln"), 
+                                      selected = "DIF_GDPDBTS_ln"),
+                          checkboxInput("scatterD3_x_log", "Logarithmic x scale", value = FALSE),
+                          selectInput("scatterD3_y", "y variable :",
+                                      choices = c("GDP Levels"="GDPDBTS",
+                                                  "Per Capita GDP"="PPGDPDBTS",
+                                                  "Per Capita GDP-Growth"="DIF_PPGDPDBTS_ln", 
+                                                  "GDP-Growth"="DIF_GDPDBTS_ln"),
+                                      selected = "PPGDPDBTS"),
+                          checkboxInput("scatterD3_y_log", "Logarithmic y scale", value = FALSE),
+                          selectInput("scatterD3_col", "Color mapping variable :",
+                                      choices = c("None" = "None",
+                                                  "Region" = "REGION"),
+                                      selected = "REGION"),
+                          checkboxInput("scatterD3_ellipses", "Confidence ellipses", value = TRUE),
+                          selectInput("scatterD3_symbol", "Symbol mapping variable :",
+                                      choices = c("None" = "None",
+                                                  "Region" = "REGION"),
+                                      selected = "None"),
+                          selectInput("scatterD3_size", "Size mapping variable :",
+                                      choices = c("None" = "None",
+                                                  "GDP Levels"="GDPDBTS",
+                                                  "Per Capita GDP"="PPGDPDBTS",
+                                                  "Per Capita GDP-Growth"="DIF_PPGDPDBTS_ln", 
+                                                  "GDP-Growth"="DIF_GDPDBTS_ln"),
+                                      selected = "None"),
+                          checkboxInput("scatterD3_threshold_line", "Arbitrary threshold line", value = FALSE),    
+                          sliderInput("scatterD3_labsize", "Labels size :",
+                                      min = 5, max = 25, value = 11),
+                          sliderInput("scatterD3_opacity", "Points opacity :", min = 0, max = 1, value = 1, step = 0.05),
+                          checkboxInput("scatterD3_transitions", "Use transitions", value = TRUE) ),
+                        mainPanel(
+                          scatterD3Output("coolplot"),
+                          br(), br(),
+                          tableOutput("results"),
+                          
+                          hr(),
+                          fluidRow(column(12, verbatimTextOutput("value")))
+                        )
+                      )
+             )))
+# Define server logic required to draw a histogram
+server <-function(input, output) {
+  # You can access the value of the widget with input$select, e.g.
+  
+  output$dyPlotPopulation <- renderDygraph({
+    
+    
+    POPTSSUB<- subset(POPTS,select=input$epopulation)
+    
+    dygraph(POPTSSUB, main = "Population  (1820-2008)") %>% 
+      dyLegend(show = "always", hideOnMouseOut = FALSE)%>%
+      dyAxis("x", label="Year" ,drawGrid = FALSE) %>%
+      dyAxis("y", label = "000 at mid-year ") %>%
+      dyOptions(includeZero = TRUE, 
+                axisLineColor = "navy", 
+                gridLineColor = "lightblue",
+                titleHeight=2) %>%
+      dyLegend(width = 320) %>% 
+      dyRangeSelector()
+    
+  })
+  
+  output$dyPlotGDP <- renderDygraph({
+    
+    
+    GDODBTSSUB<- subset(GDPDBTS,select=input$egdp)
+    
+    dygraph(GDODBTSSUB, main = "GDP Levels (1820-2008)") %>% 
+      dyLegend(show = "always", hideOnMouseOut = FALSE)%>%
+      dyAxis("x", label="Year" ,drawGrid = FALSE) %>%
+      dyAxis("y", label = "Million 1990 International Geary-Khamis dollars ") %>%
+      dyOptions(includeZero = TRUE, 
+                axisLineColor = "navy", 
+                gridLineColor = "lightblue",
+                titleHeight=2) %>%
+      dyLegend(width = 120) %>% 
+      dyRangeSelector()
+    
+  })
+  
+  output$dyPlotPPGDP <- renderDygraph({
+    
+    
+    PPGDODBTSSUB<- subset(PPGDPDBTS,select=input$eppgdp)
+    
+    dygraph(PPGDODBTSSUB, main = "Per Capita GDP (1820-2008)") %>% 
+      dyLegend(show = "always", hideOnMouseOut = FALSE)%>%
+      dyAxis("x", label="Year" ,drawGrid = FALSE) %>%
+      dyAxis("y", label = "1990 International Geary-Khamis dollars") %>%
+      dyOptions(includeZero = TRUE, 
+                axisLineColor = "navy", 
+                gridLineColor = "lightblue",
+                titleHeight=2) %>%
+      dyLegend(width = 120)  %>% 
+      dyRangeSelector()
+    
+    
+  })
+  
+  output$dyPlotPopulation_growth <- renderDygraph({
+    
+    POPTS_ln<-log(POPTS)
+    DIF_POPTS_ln<-(diff(POPTS_ln))*100
+    DIF_POPTS_ln[is.nan(DIF_POPTS_ln)] <- 0
+    
+    DIF_POPTSSUB_ln<- subset(DIF_POPTS_ln,select=input$epopulation_growth)
+    
+    dygraph(DIF_POPTSSUB_ln, main = "Population-Growth (1821-2008)") %>% 
+      dyLegend(show = "always", hideOnMouseOut = FALSE)%>%
+      dyAxis("x", label="Year" ,drawGrid = FALSE) %>%
+      dyAxis("y", label = "Percentage change on previous period (LN%)") %>%
+      dyOptions(includeZero = TRUE, 
+                axisLineColor = "navy", 
+                gridLineColor = "lightblue",
+                titleHeight=2) %>%
+      dyLegend(width = 320) %>% 
+      dyRangeSelector()
+    
+  })
+  
+  output$dyPlotGDP_growth <- renderDygraph({
+    
+    GDPDBTS_ln<-log(GDPDBTS)
+    DIF_GDPDBTS_ln<-(diff(GDPDBTS_ln))*100
+    DIF_GDPDBTS_ln[is.nan(DIF_GDPDBTS_ln)] <- 0
+    
+    DIF_GDODBTSSUB_ln<- subset(DIF_GDPDBTS_ln,select=input$egdp_growth)
+    
+    dygraph(DIF_GDODBTSSUB_ln, main = "GDP-Growth (1821-2008)") %>% 
+      dyLegend(show = "always", hideOnMouseOut = FALSE)%>%
+      dyAxis("x", label="Year" ,drawGrid = FALSE) %>%
+      dyAxis("y", label = "Percentage change on previous period (LN%)") %>%
+      dyOptions(includeZero = TRUE, 
+                axisLineColor = "navy", 
+                gridLineColor = "lightblue",
+                titleHeight=2) %>%
+      dyLegend(width = 120) %>% 
+      dyRangeSelector()
+    
+  })
+  
+  output$dyPlotPPGDP_growth <- renderDygraph({
+    
+    PPGDPDBTS_ln<-log(PPGDPDBTS)
+    DIF_PPGDPDBTS_ln<-(diff(PPGDPDBTS_ln))*100
+    DIF_PPGDPDBTS_ln[is.nan(DIF_PPGDPDBTS_ln)] <- 0
+    
+    DIF_PPGDODBTSSUB_ln<- subset(DIF_PPGDPDBTS_ln,select=input$eppgdp_growth)
+    
+    dygraph(DIF_PPGDODBTSSUB_ln, main = "Per Capita GDP-Growth (1821-2008)") %>% 
+      dyLegend(show = "always", hideOnMouseOut = FALSE)%>%
+      dyAxis("x", label="Year" ,drawGrid = FALSE) %>%
+      dyAxis("y", label = "Percentage change on previous period (LN%)") %>%
+      dyOptions(includeZero = TRUE, 
+                axisLineColor = "navy", 
+                gridLineColor = "lightblue",
+                titleHeight=2) %>%
+      dyLegend(width = 120)  %>% 
+      dyRangeSelector()
+  })
+  
+  output$coolplot <- renderScatterD3({
+    
+    Data_Scatter <-
+      Data_Scatter %>%
+      filter(Date==input$scatterD3_ano)
+
+    for (i in 1){
+      Data_Scatter<-subset(Data_Scatter,REGION==input$Region[i]
+                            |REGION==input$Region[i+1]
+                            |REGION==input$Region[i+2]
+                            |REGION==input$Region[i+3]
+                            |REGION==input$Region[i+4]
+                            |REGION==input$Region[i+5]
+                            |REGION==input$Region[i+6]
+                            |REGION==input$Region[i+7]
+                            |REGION==input$Region[i+8]
+                            |REGION==input$Region[i+9]
+                            |REGION==input$Region[i+10])
+    }
+    
+    data <- reactive({
+      Data_Scatter
+    })
+    
+    col_var <- if (input$scatterD3_col == "None") NULL else data()[,input$scatterD3_col]
+    symbol_var <- if (input$scatterD3_symbol == "None") NULL else data()[,input$scatterD3_symbol]
+    size_var <- if (input$scatterD3_size == "None") NULL else data()[,input$scatterD3_size]
+    
+    
+    scatterD3(x =data()[,input$scatterD3_x], y =data()[,input$scatterD3_y],labels_size = input$scatterD3_labsize,lab = data()[,"Countries"], col_var = data()[,input$scatterD3_col],
+              xlab = input$scatterD3_x,
+              ylab = input$scatterD3_y,
+              x_log = input$scatterD3_x_log,
+              y_log = input$scatterD3_y_log,
+              col_lab = input$scatterD3_col,
+              ellipses = input$scatterD3_ellipses,
+              point_opacity = input$scatterD3_opacity,
+              size_var = size_var,
+              size_lab = input$scatterD3_size,
+              symbol_var = symbol_var,
+              symbol_lab = input$scatterD3_symbol)
+  })
+}
+
+
+# Run the application 
+shinyApp(ui = ui, server = server)
 
