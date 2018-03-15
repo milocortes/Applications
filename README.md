@@ -1,4 +1,4 @@
-# Application Maddison
+# Maddison Application
 
 Esta aplicación permite visualizar algunas variables de la base de datos de Maddison. 
 En esta nueva versión incorporó: 
